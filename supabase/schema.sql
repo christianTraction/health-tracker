@@ -5,8 +5,28 @@
 -- ── Extensions ───────────────────────────────────────────────
 create extension if not exists "uuid-ossp";
 
+-- ============================================================
+-- CLEANUP — Drop everything for a clean slate
+-- ============================================================
+
+-- Drop triggers on auth.users (created by handle_new_user)
+drop trigger if exists on_auth_user_created on auth.users;
+
+-- Drop functions (in reverse dependency order)
+drop function if exists handle_new_user();
+drop function if exists update_updated_at();
+
+-- Drop all tables (with CASCADE to drop triggers and policies)
+drop table if exists workout_sets cascade;
+drop table if exists workout_exercises cascade;
+drop table if exists workouts cascade;
+drop table if exists lab_results cascade;
+drop table if exists body_scans cascade;
+drop table if exists daily_logs cascade;
+drop table if exists profiles cascade;
+
 -- ── Helpers ──────────────────────────────────────────────────
-create or replace function update_updated_at()
+create function update_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -17,8 +37,9 @@ $$;
 -- ============================================================
 -- PROFILES
 -- ============================================================
-create table profiles (
+create table if not exists profiles (
   id              uuid primary key references auth.users (id) on delete cascade,
+  email           text unique,
   username        text unique,
   full_name       text,
   avatar_url      text,
@@ -49,22 +70,23 @@ create policy "Users can delete own profile"
   on profiles for delete using (auth.uid() = id);
 
 -- Auto-create profile on sign-up
-create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+create or replace function public.handle_new_user()
+returns trigger as $$
 begin
-  insert into profiles (id) values (new.id);
+  insert into public.profiles (id, full_name, email)
+  values (new.id, new.raw_user_meta_data->>'full_name', new.email);
   return new;
 end;
-$$;
+$$ language plpgsql security definer;
 
-create trigger on_auth_user_created
+create or replace trigger on_auth_user_created
   after insert on auth.users
-  for each row execute function handle_new_user();
+  for each row execute procedure public.handle_new_user();
 
 -- ============================================================
 -- DAILY LOGS
 -- ============================================================
-create table daily_logs (
+create table if not exists daily_logs (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references auth.users (id) on delete cascade,
   log_date        date not null,
@@ -111,7 +133,7 @@ create policy "Users can delete own daily logs"
 -- ============================================================
 -- WORKOUTS
 -- ============================================================
-create table workouts (
+create table if not exists workouts (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references auth.users (id) on delete cascade,
   name            text not null,
@@ -145,7 +167,7 @@ create policy "Users can delete own workouts"
 -- ============================================================
 -- WORKOUT EXERCISES
 -- ============================================================
-create table workout_exercises (
+create table if not exists workout_exercises (
   id              uuid primary key default uuid_generate_v4(),
   workout_id      uuid not null references workouts (id) on delete cascade,
   user_id         uuid not null references auth.users (id) on delete cascade,
@@ -185,7 +207,7 @@ create policy "Users can delete own workout exercises"
 -- ============================================================
 -- WORKOUT SETS
 -- ============================================================
-create table workout_sets (
+create table if not exists workout_sets (
   id                  uuid primary key default uuid_generate_v4(),
   workout_exercise_id uuid not null references workout_exercises (id) on delete cascade,
   user_id             uuid not null references auth.users (id) on delete cascade,
@@ -227,7 +249,7 @@ create policy "Users can delete own workout sets"
 -- ============================================================
 -- BODY SCANS
 -- ============================================================
-create table body_scans (
+create table if not exists body_scans (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references auth.users (id) on delete cascade,
   scanned_at      timestamptz not null default now(),
@@ -286,7 +308,7 @@ create policy "Users can delete own body scans"
 -- ============================================================
 -- LAB RESULTS
 -- ============================================================
-create table lab_results (
+create table if not exists lab_results (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references auth.users (id) on delete cascade,
   tested_at       date not null,
