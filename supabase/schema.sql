@@ -98,6 +98,7 @@ create table if not exists daily_logs (
   fat_g           numeric(6, 1),
   water_ml        integer,
   steps           integer,
+  workout_type    text,
   sleep_hours     numeric(4, 1),
   sleep_quality   integer check (sleep_quality between 1 and 10),
   energy_level    integer check (energy_level between 1 and 10),
