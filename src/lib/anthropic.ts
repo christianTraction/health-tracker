@@ -3,12 +3,20 @@ import Anthropic from '@anthropic-ai/sdk'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export type DailyLogParsed = {
-  calories_in?: number | null
+  calories?: number | null
   protein_g?: number | null
   steps?: number | null
-  weight_kg?: number | null
-  workout_type?: string | null
+  weight_lbs?: number | null
+  training_type?: string | null
   notes?: string | null
+}
+
+function parseNumber(value: unknown): number | null {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+    return Number(value)
+  }
+  return null
 }
 
 export async function parseDailyLogEntry(text: string): Promise<DailyLogParsed> {
@@ -20,13 +28,15 @@ export async function parseDailyLogEntry(text: string): Promise<DailyLogParsed> 
 
 Required JSON format (use null for missing values):
 {
-  "calories_in": <number or null>,
+  "calories": <number or null>,
   "protein_g": <number or null>,
   "steps": <number or null>,
-  "weight_kg": <number or null>,
-  "workout_type": <string or null>,
+  "weight_lbs": <number or null>,
+  "training_type": <string or null>,
   "notes": <string or null>
 }
+
+If the entry contains weight in kilograms, convert it to pounds and return weight_lbs.
 
 User entry: ${text}`
 
@@ -63,11 +73,11 @@ User entry: ${text}`
   try {
     const raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>
     return {
-      calories_in: typeof raw.calories_in === 'number' ? raw.calories_in : null,
-      protein_g: typeof raw.protein_g === 'number' ? raw.protein_g : null,
-      steps: typeof raw.steps === 'number' ? raw.steps : null,
-      weight_kg: typeof raw.weight_kg === 'number' ? raw.weight_kg : null,
-      workout_type: typeof raw.workout_type === 'string' ? raw.workout_type : null,
+      calories: parseNumber(raw.calories),
+      protein_g: parseNumber(raw.protein_g),
+      steps: parseNumber(raw.steps),
+      weight_lbs: parseNumber(raw.weight_lbs),
+      training_type: typeof raw.training_type === 'string' ? raw.training_type : null,
       notes: typeof raw.notes === 'string' ? raw.notes : null,
     }
   } catch (err) {

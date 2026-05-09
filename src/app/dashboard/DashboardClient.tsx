@@ -5,11 +5,11 @@ import { useActionState } from 'react'
 import { logDailyEntry } from '@/app/actions/dailyLog'
 
 type DailyLog = {
-  calories_in?: number | null
+  calories?: number | null
   protein_g?: number | null
   steps?: number | null
-  weight_kg?: number | null
-  workout_type?: string | null
+  weight_lbs?: number | null
+  training_type?: string | null
   notes?: string | null
 }
 
@@ -61,11 +61,11 @@ export default function DashboardClient({ initialLog }: { initialLog: DailyLog |
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {[
-            { label: 'Calories', value: log?.calories_in ?? '—' },
+            { label: 'Calories', value: log?.calories ?? '—' },
             { label: 'Protein', value: log?.protein_g ? `${log.protein_g} g` : '—' },
             { label: 'Steps', value: log?.steps ?? '—' },
-            { label: 'Weight', value: log?.weight_kg ? `${log.weight_kg} kg` : '—' },
-            { label: 'Workout', value: log?.workout_type ?? '—' },
+            { label: 'Weight', value: log?.weight_lbs ? `${log.weight_lbs} lbs` : '—' },
+            { label: 'Training', value: log?.training_type ?? '—' },
           ].map((item) => (
             <div key={item.label} className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900">
               <p className="text-sm uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">{item.label}</p>

@@ -39,11 +39,11 @@ export async function logDailyEntry(
   const values = {
     user_id: user.id,
     date: today,
-    calories_in: parsed.calories_in,
+    calories: parsed.calories,
     protein_g: parsed.protein_g,
     steps: parsed.steps,
-    weight_kg: parsed.weight_kg,
-    workout_type: parsed.workout_type ? parsed.workout_type.trim() : null,
+    weight_lbs: parsed.weight_lbs,
+    training_type: parsed.training_type ? parsed.training_type.trim() : null,
     notes: parsed.notes ? parsed.notes.trim() : entry,
   }
 

@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   const today = new Date().toISOString().slice(0, 10)
   const { data: dailyLog } = await supabase
     .from('daily_logs')
-    .select('calories_in,protein_g,steps,weight_kg,workout_type,notes')
+    .select('calories,protein_g,steps,weight_lbs,training_type,notes')
     .eq('date', today)
     .single()
 
