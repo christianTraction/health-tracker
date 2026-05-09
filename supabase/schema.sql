@@ -89,7 +89,7 @@ create or replace trigger on_auth_user_created
 create table if not exists daily_logs (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references auth.users (id) on delete cascade,
-  log_date        date not null,
+  date        date not null,
   weight_kg       numeric(5, 2),
   body_fat_pct    numeric(4, 1),
   calories_in     integer,
@@ -108,10 +108,10 @@ create table if not exists daily_logs (
   notes           text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
-  unique (user_id, log_date)
+  unique (user_id, date)
 );
 
-create index daily_logs_user_date_idx on daily_logs (user_id, log_date desc);
+create index daily_logs_user_date_idx on daily_logs (user_id, date desc);
 
 create trigger daily_logs_updated_at
   before update on daily_logs

@@ -38,18 +38,18 @@ export async function logDailyEntry(
 
   const values = {
     user_id: user.id,
-    log_date: today,
-    calories_in: parsed.calories_in ?? undefined,
-    protein_g: parsed.protein_g ?? undefined,
-    steps: parsed.steps ?? undefined,
-    weight_kg: parsed.weight_kg ?? undefined,
-    workout_type: parsed.workout_type?.trim() || undefined,
-    notes: parsed.notes?.trim() || entry,
+    date: today,
+    calories_in: parsed.calories_in,
+    protein_g: parsed.protein_g,
+    steps: parsed.steps,
+    weight_kg: parsed.weight_kg,
+    workout_type: parsed.workout_type ? parsed.workout_type.trim() : null,
+    notes: parsed.notes ? parsed.notes.trim() : entry,
   }
 
   const { data, error } = await supabase
     .from('daily_logs')
-    .upsert(values, { onConflict: 'user_id,log_date' })
+    .upsert(values, { onConflict: 'user_id,date' })
     .select('*')
     .single()
 

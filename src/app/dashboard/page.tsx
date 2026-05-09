@@ -17,7 +17,7 @@ export default async function DashboardPage() {
   const { data: dailyLog } = await supabase
     .from('daily_logs')
     .select('calories_in,protein_g,steps,weight_kg,workout_type,notes')
-    .eq('log_date', today)
+    .eq('date', today)
     .single()
 
   return <DashboardClient initialLog={dailyLog} />

@@ -16,12 +16,22 @@ export async function parseDailyLogEntry(text: string): Promise<DailyLogParsed> 
     throw new Error('Missing ANTHROPIC_API_KEY environment variable')
   }
 
-  const prompt = `Extract the user's daily health log from the plain English entry below. Return valid JSON only with these keys: calories_in, protein_g, steps, weight_kg, workout_type, notes. Use numbers when possible and null for any missing value. Do not include any extra text.
+  const prompt = `Extract health data from this daily log entry. You MUST respond with ONLY valid JSON, nothing else.
 
-User entry:\n${text}`
+Required JSON format (use null for missing values):
+{
+  "calories_in": <number or null>,
+  "protein_g": <number or null>,
+  "steps": <number or null>,
+  "weight_kg": <number or null>,
+  "workout_type": <string or null>,
+  "notes": <string or null>
+}
+
+User entry: ${text}`
 
   const response = await anthropic.messages.create({
-    model: 'claude-3.5-mini',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 300,
     messages: [
       {
@@ -43,23 +53,25 @@ User entry:\n${text}`
         .join('')
     : String(response.content ?? '')
 
-  const jsonMatch = content.match(/\{[\s\S]*\}$/)
+  const jsonMatch = content.match(/\{[\s\S]*\}/)
 
   if (!jsonMatch) {
+    console.warn('[parseDailyLogEntry] No JSON found in response:', content)
     return { notes: text }
   }
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as DailyLogParsed
+    const raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>
     return {
-      calories_in: parsed.calories_in ?? null,
-      protein_g: parsed.protein_g ?? null,
-      steps: parsed.steps ?? null,
-      weight_kg: parsed.weight_kg ?? null,
-      workout_type: parsed.workout_type ?? null,
-      notes: parsed.notes ?? null,
+      calories_in: typeof raw.calories_in === 'number' ? raw.calories_in : null,
+      protein_g: typeof raw.protein_g === 'number' ? raw.protein_g : null,
+      steps: typeof raw.steps === 'number' ? raw.steps : null,
+      weight_kg: typeof raw.weight_kg === 'number' ? raw.weight_kg : null,
+      workout_type: typeof raw.workout_type === 'string' ? raw.workout_type : null,
+      notes: typeof raw.notes === 'string' ? raw.notes : null,
     }
-  } catch {
+  } catch (err) {
+    console.warn('[parseDailyLogEntry] Failed to parse JSON:', jsonMatch[0], err)
     return { notes: text }
   }
 }
