@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { parseDeXAPdf, parseLabPdf } from '@/lib/anthropic'
 
 export type BodyScanInput = {
   date: string
@@ -23,6 +24,50 @@ export type LabResultInput = {
   triglycerides: number | null
   systolicBp: number | null
   diastolicBp: number | null
+}
+
+export async function parseDeXAPdfFile(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  const file = formData.get('dexa_pdf')
+  if (!(file instanceof File)) {
+    return { error: 'Please upload a DEXA scan PDF.' }
+  }
+
+  try {
+    const parsed = await parseDeXAPdf(file)
+    return { parsed }
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to parse DEXA PDF.',
+    }
+  }
+}
+
+export async function parseLabPdfFile(
+  _prevState: { error?: string } | undefined,
+  formData: FormData
+) {
+  const file = formData.get('lab_pdf')
+  if (!(file instanceof File)) {
+    return { error: 'Please upload a lab report PDF.' }
+  }
+
+  try {
+    const parsed = await parseLabPdf(file)
+    return { parsed }
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to parse lab report PDF.',
+    }
+  }
 }
 
 export async function saveBodyScan(bodyScan: BodyScanInput) {

@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { saveBodyScan, saveLabResult, getBodyScans, getLabResults } from '@/app/actions/health'
+import { useActionState } from 'react'
+import { parseDeXAPdfFile, parseLabPdfFile, saveBodyScan, saveLabResult, getBodyScans, getLabResults } from '@/app/actions/health'
+import { DeXAParsed, LabResultsParsed } from '@/lib/anthropic'
 
 type BodyScan = {
   id: string
@@ -31,9 +33,33 @@ export default function HealthClient() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // DEXA state
+  const [deXAParsed, setDeXAParsed] = useState<DeXAParsed | null>(null)
+  const [deXAState, deXAAction] = useActionState(parseDeXAPdfFile, undefined)
+
+  // Lab state
+  const [labParsed, setLabParsed] = useState<LabResultsParsed | null>(null)
+  const [labState, labAction] = useActionState(parseLabPdfFile, undefined)
+
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (deXAState?.parsed) {
+      setDeXAParsed(deXAState.parsed)
+    } else if (deXAState?.error) {
+      setError(deXAState.error)
+    }
+  }, [deXAState])
+
+  useEffect(() => {
+    if (labState?.parsed) {
+      setLabParsed(labState.parsed)
+    } else if (labState?.error) {
+      setError(labState.error)
+    }
+  }, [labState])
 
   const loadData = async () => {
     setLoading(true)
@@ -50,51 +76,55 @@ export default function HealthClient() {
     setLoading(false)
   }
 
-  const handleSaveBodyScan = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError(null)
+  const handleSaveBodyScan = async () => {
+    if (!deXAParsed || !deXAParsed.date) {
+      setError('Missing date in parsed data.')
+      return
+    }
 
-    const formData = new FormData(e.currentTarget)
     const result = await saveBodyScan({
-      date: formData.get('date') as string,
-      weight: formData.get('weight') ? parseFloat(formData.get('weight') as string) : null,
-      bodyFatPct: formData.get('bodyFatPct') ? parseFloat(formData.get('bodyFatPct') as string) : null,
-      fatMass: formData.get('fatMass') ? parseFloat(formData.get('fatMass') as string) : null,
-      leanMass: formData.get('leanMass') ? parseFloat(formData.get('leanMass') as string) : null,
-      boneMass: formData.get('boneMass') ? parseFloat(formData.get('boneMass') as string) : null,
-      vatMass: formData.get('vatMass') ? parseFloat(formData.get('vatMass') as string) : null,
-      rmrCalories: formData.get('rmrCalories') ? parseInt(formData.get('rmrCalories') as string) : null,
+      date: deXAParsed.date,
+      weight: deXAParsed.weight ?? null,
+      bodyFatPct: deXAParsed.bodyFatPct ?? null,
+      fatMass: deXAParsed.fatMass ?? null,
+      leanMass: deXAParsed.leanMass ?? null,
+      boneMass: deXAParsed.boneMass ?? null,
+      vatMass: deXAParsed.vatMass ?? null,
+      rmrCalories: deXAParsed.rmrCalories ?? null,
     })
 
     if (result.error) {
       setError(result.error)
     } else {
-      e.currentTarget.reset()
+      setDeXAParsed(null)
+      setError(null)
       await loadData()
     }
   }
 
-  const handleSaveLabResult = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError(null)
+  const handleSaveLabResult = async () => {
+    if (!labParsed || !labParsed.date) {
+      setError('Missing date in parsed data.')
+      return
+    }
 
-    const formData = new FormData(e.currentTarget)
     const result = await saveLabResult({
-      date: formData.get('date') as string,
-      hba1c: formData.get('hba1c') ? parseFloat(formData.get('hba1c') as string) : null,
-      glucose: formData.get('glucose') ? parseFloat(formData.get('glucose') as string) : null,
-      ldl: formData.get('ldl') ? parseFloat(formData.get('ldl') as string) : null,
-      hdl: formData.get('hdl') ? parseFloat(formData.get('hdl') as string) : null,
-      totalChol: formData.get('totalChol') ? parseFloat(formData.get('totalChol') as string) : null,
-      triglycerides: formData.get('triglycerides') ? parseFloat(formData.get('triglycerides') as string) : null,
-      systolicBp: formData.get('systolicBp') ? parseFloat(formData.get('systolicBp') as string) : null,
-      diastolicBp: formData.get('diastolicBp') ? parseFloat(formData.get('diastolicBp') as string) : null,
+      date: labParsed.date,
+      hba1c: labParsed.hba1c ?? null,
+      glucose: labParsed.glucose ?? null,
+      ldl: labParsed.ldl ?? null,
+      hdl: labParsed.hdl ?? null,
+      totalChol: labParsed.totalChol ?? null,
+      triglycerides: labParsed.triglycerides ?? null,
+      systolicBp: labParsed.systolicBp ?? null,
+      diastolicBp: labParsed.diastolicBp ?? null,
     })
 
     if (result.error) {
       setError(result.error)
     } else {
-      e.currentTarget.reset()
+      setLabParsed(null)
+      setError(null)
       await loadData()
     }
   }
@@ -104,7 +134,7 @@ export default function HealthClient() {
       <div className="rounded-3xl border border-zinc-200 bg-white/90 p-8 shadow-sm backdrop-blur dark:border-zinc-700 dark:bg-zinc-950/80">
         <h1 className="text-3xl font-semibold text-zinc-950 dark:text-zinc-50">Health Measurements</h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Track your DEXA scans and lab results over time.
+          Upload DEXA scans and lab reports to track your health measurements over time.
         </p>
 
         {/* Tabs */}
@@ -140,91 +170,103 @@ export default function HealthClient() {
         {/* DEXA Scans Tab */}
         {activeTab === 'dexa' && (
           <div className="mt-8 space-y-8">
-            {/* DEXA Form */}
-            <form onSubmit={handleSaveBodyScan} className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
-              <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Add DEXA Scan</h2>
+            {/* DEXA Upload */}
+            {!deXAParsed ? (
+              <form action={deXAAction} className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Upload DEXA Scan PDF</h2>
 
-              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Date</label>
-                  <input
-                    type="date"
-                    name="date"
-                    required
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+                  <label className="block rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50">
+                    <span className="text-sm font-medium">DEXA Scan PDF</span>
+                    <input
+                      type="file"
+                      name="dexa_pdf"
+                      accept="application/pdf"
+                      className="mt-3 w-full text-sm text-zinc-900 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-950 file:px-4 file:py-2 file:text-white file:ring-0 dark:text-zinc-50 dark:file:bg-zinc-50 dark:file:text-zinc-950"
+                      required
+                    />
+                  </label>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Weight (kg)</label>
-                  <input
-                    type="number"
-                    name="weight"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  Parse DEXA PDF
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Confirm DEXA Results</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {deXAParsed.date && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+                        {new Date(deXAParsed.date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  {deXAParsed.weight !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Weight</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.weight} kg</p>
+                    </div>
+                  )}
+                  {deXAParsed.bodyFatPct !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Body Fat</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.bodyFatPct}%</p>
+                    </div>
+                  )}
+                  {deXAParsed.fatMass !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Fat Mass</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.fatMass} kg</p>
+                    </div>
+                  )}
+                  {deXAParsed.leanMass !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Lean Mass</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.leanMass} kg</p>
+                    </div>
+                  )}
+                  {deXAParsed.boneMass !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Bone Mass</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.boneMass} kg</p>
+                    </div>
+                  )}
+                  {deXAParsed.vatMass !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">VAT</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.vatMass} kg</p>
+                    </div>
+                  )}
+                  {deXAParsed.rmrCalories !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">RMR</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{deXAParsed.rmrCalories} cal</p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Body Fat %</label>
-                  <input
-                    type="number"
-                    name="bodyFatPct"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Fat Mass (kg)</label>
-                  <input
-                    type="number"
-                    name="fatMass"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Lean Mass (kg)</label>
-                  <input
-                    type="number"
-                    name="leanMass"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Bone Mass (kg)</label>
-                  <input
-                    type="number"
-                    name="boneMass"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Visceral Fat (kg)</label>
-                  <input
-                    type="number"
-                    name="vatMass"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">RMR (calories)</label>
-                  <input
-                    type="number"
-                    name="rmrCalories"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSaveBodyScan}
+                    className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                  >
+                    Save DEXA Scan
+                  </button>
+                  <button
+                    onClick={() => setDeXAParsed(null)}
+                    className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
-
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-              >
-                Save DEXA Scan
-              </button>
-            </form>
+            )}
 
             {/* DEXA History */}
             <div>
@@ -245,7 +287,7 @@ export default function HealthClient() {
                         {scan.fat_mass_kg !== null && <p>Fat Mass: {scan.fat_mass_kg} kg</p>}
                         {scan.lean_mass_kg !== null && <p>Lean Mass: {scan.lean_mass_kg} kg</p>}
                         {scan.bone_mass_kg !== null && <p>Bone Mass: {scan.bone_mass_kg} kg</p>}
-                        {scan.visceral_fat !== null && <p>Visceral Fat: {scan.visceral_fat} kg</p>}
+                        {scan.visceral_fat !== null && <p>VAT: {scan.visceral_fat} kg</p>}
                       </div>
                     </div>
                   ))}
@@ -258,101 +300,105 @@ export default function HealthClient() {
         {/* Lab Results Tab */}
         {activeTab === 'labs' && (
           <div className="mt-8 space-y-8">
-            {/* Lab Form */}
-            <form onSubmit={handleSaveLabResult} className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
-              <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Add Lab Results</h2>
+            {/* Lab Upload */}
+            {!labParsed ? (
+              <form action={labAction} className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Upload Lab Report PDF</h2>
 
-              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Date</label>
-                  <input
-                    type="date"
-                    name="date"
-                    required
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+                  <label className="block rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50">
+                    <span className="text-sm font-medium">Lab Report PDF</span>
+                    <input
+                      type="file"
+                      name="lab_pdf"
+                      accept="application/pdf"
+                      className="mt-3 w-full text-sm text-zinc-900 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-950 file:px-4 file:py-2 file:text-white file:ring-0 dark:text-zinc-50 dark:file:bg-zinc-50 dark:file:text-zinc-950"
+                      required
+                    />
+                  </label>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">HbA1c (%)</label>
-                  <input
-                    type="number"
-                    name="hba1c"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  Parse Lab Report
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/50">
+                <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Confirm Lab Results</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {labParsed.date && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Date</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+                        {new Date(labParsed.date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  {labParsed.hba1c !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">HbA1c</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.hba1c}%</p>
+                    </div>
+                  )}
+                  {labParsed.glucose !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Glucose</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.glucose} mg/dL</p>
+                    </div>
+                  )}
+                  {labParsed.ldl !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">LDL</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.ldl} mg/dL</p>
+                    </div>
+                  )}
+                  {labParsed.hdl !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">HDL</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.hdl} mg/dL</p>
+                    </div>
+                  )}
+                  {labParsed.totalChol !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total Cholesterol</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.totalChol} mg/dL</p>
+                    </div>
+                  )}
+                  {labParsed.triglycerides !== null && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Triglycerides</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{labParsed.triglycerides} mg/dL</p>
+                    </div>
+                  )}
+                  {(labParsed.systolicBp !== null || labParsed.diastolicBp !== null) && (
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Blood Pressure</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+                        {labParsed.systolicBp}/{labParsed.diastolicBp} mmHg
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Glucose (mg/dL)</label>
-                  <input
-                    type="number"
-                    name="glucose"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">LDL (mg/dL)</label>
-                  <input
-                    type="number"
-                    name="ldl"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">HDL (mg/dL)</label>
-                  <input
-                    type="number"
-                    name="hdl"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Total Cholesterol (mg/dL)</label>
-                  <input
-                    type="number"
-                    name="totalChol"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Triglycerides (mg/dL)</label>
-                  <input
-                    type="number"
-                    name="triglycerides"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Systolic BP (mmHg)</label>
-                  <input
-                    type="number"
-                    name="systolicBp"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Diastolic BP (mmHg)</label>
-                  <input
-                    type="number"
-                    name="diastolicBp"
-                    step="0.1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-950 focus:outline-none dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500"
-                  />
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSaveLabResult}
+                    className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                  >
+                    Save Lab Results
+                  </button>
+                  <button
+                    onClick={() => setLabParsed(null)}
+                    className="inline-flex items-center justify-center rounded-full border border-zinc-300 px-6 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
-
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-zinc-950 px-6 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-              >
-                Save Lab Results
-              </button>
-            </form>
+            )}
 
             {/* Lab History */}
             <div>
