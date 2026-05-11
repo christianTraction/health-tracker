@@ -307,6 +307,41 @@ create policy "Users can delete own body scans"
   on body_scans for delete using (auth.uid() = user_id);
 
 -- ============================================================
+-- RECEIPTS
+-- ============================================================
+create table if not exists receipts (
+  id                 uuid primary key default uuid_generate_v4(),
+  user_id            uuid not null references auth.users (id) on delete cascade,
+  date               date not null,
+  store_name         text,
+  total_amount       numeric(10, 2),
+  items              jsonb,
+  meal_cost_estimate numeric(10, 2),
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+create index receipts_user_date_idx on receipts (user_id, date desc);
+
+create trigger receipts_updated_at
+  before update on receipts
+  for each row execute function update_updated_at();
+
+alter table receipts enable row level security;
+
+create policy "Users can view own receipts"
+  on receipts for select using (auth.uid() = user_id);
+
+create policy "Users can insert own receipts"
+  on receipts for insert with check (auth.uid() = user_id);
+
+create policy "Users can update own receipts"
+  on receipts for update using (auth.uid() = user_id);
+
+create policy "Users can delete own receipts"
+  on receipts for delete using (auth.uid() = user_id);
+
+-- ============================================================
 -- LAB RESULTS
 -- ============================================================
 create table if not exists lab_results (
